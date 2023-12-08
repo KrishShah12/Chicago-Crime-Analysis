@@ -1,0 +1,238 @@
+```{r}
+library(dplyr)
+library(xts)
+library(ggplot2)
+library(forecast)
+library(lubridate)
+```
+
+```{r}
+crimes <- read.csv('/Users/maxjacobs/Desktop/FALL 2023/REGRESSION/PROJECT/Crimes.csv')
+```
+
+```{r}
+# Convert 'date' to a Date type
+crimes$date <- as.Date(crimes$date)
+
+crimes_filtered <- crimes %>%
+  filter(`Community.Area` %in% c(5, 6, 7, 8, 21, 22, 24, 28, 29, 31, 32, 33, 34, 35))
+
+# Create a new data frame with the count of crimes per date
+time_series_data <- crimes_filtered %>%
+  group_by(date) %>%
+  summarize(Number_of_Crimes = n())
+
+# Create a ts time series object
+daily_data_ts <- ts(time_series_data$Number_of_Crimes, start = c(2008, 1), frequency = 365)
+daily_data_ts <- head(daily_data_ts, -1)
+```
+
+```{r}
+ggplot(time_series_data, aes(x = date, y = Number_of_Crimes)) +
+  geom_line() +
+  labs(x = "Date", y = "Number of Crimes per day", title = "Crimes Per Day From 01/01/2008 - 10/31/2023") +
+  theme_minimal()
+```
+
+```{r}
+decomp<-decompose(daily_data_ts)  
+plot(decomp) 
+```
+
+# #######
+# ARIMA
+# #######
+```{r}
+# Split the time series into training and testing sets
+train_size <- floor(length(daily_data_ts) * 0.9)  
+train_data <- head(daily_data_ts, train_size)
+test_data <- tail(daily_data_ts, length(daily_data_ts) - train_size)
+
+# Fit an ARIMA model using only the training data
+arima_model <- auto.arima(train_data)
+summary(arima_model)
+```
+
+```{r}
+# Make forecasts for the testing set
+forecast_values <- forecast(arima_model, h = length(test_data))
+
+# Calculate upper and lower bounds for the 95% prediction intervals
+upper <- forecast_values$upper[,1]
+lower <- forecast_values$lower[,1]
+
+y_limits <- range(c(lower, upper, daily_data_ts, fitted(arima_model)))
+
+plot(daily_data_ts, col = "black", type = "l", lwd = 2, ylim = y_limits, main = "ARIMA(5,1,1) Model Forecast",  xlab = "Date", ylab = "Number of Crimes per day")
+
+# Plot the fitted values on the training set
+lines(fitted(arima_model), col = "red", lwd = 2)
+
+# Plot the forecasted values on the test set
+lines(forecast_values$mean, col = "green", lwd = 2)
+
+# Add prediction intervals for the test set
+polygon(c(time(test_data), rev(time(test_data))), 
+        c(upper, rev(lower)), col = rgb(0, 1, 0, 0.2), border = FALSE)
+
+legend("topright", legend = c("Original Data", "Fitted Values", "Forecasted Values"), 
+       col = c("black", "red", "green", rgb(0, 1, 0, 0.2)), lty = 1, lwd = 2)
+
+# Extract the forecasted values
+forecast_values <- as.numeric(forecast_values$mean)
+
+# Extract the actual values from the test set
+actual_values <- as.numeric(test_data)
+
+# Calculate RMSE
+rmse <- sqrt(mean((forecast_values - actual_values)^2))
+cat("Root Mean Squared Error (RMSE):", rmse, "\n")
+
+# Calculate MAPE
+mape <- mean(abs((actual_values - forecast_values) / actual_values)) * 100
+cat("Mean Absolute Percentage Error (MAPE):", mape, "%\n")
+```
+
+# #######
+# SARIMA
+# #######
+```{r}
+# Split the time series into training and testing sets
+train_size <- floor(length(daily_data_ts) * 0.9)  
+train_data <- head(daily_data_ts, train_size)
+test_data <- tail(daily_data_ts, length(daily_data_ts) - train_size)
+
+# AUTO ARIMA:
+# sarima_model <- auto.arima(train_data, trace = TRUE, seasonal = TRUE, stepwise = TRUE, D = 1, d = 1)
+
+# MODEL FOUND BY auto.arima
+sarima_model <- arima(train_data, order = c(3, 1, 2), seasonal = list(order = c(0, 1, 0)))
+
+print(sarima_model)
+```
+
+```{r}
+# Make forecasts for the testing set
+forecast_values <- forecast(sarima_model, h = length(test_data))
+
+# Calculate upper and lower bounds for the 95% prediction intervals
+upper <- forecast_values$upper[, 1]
+lower <- forecast_values$lower[, 1]
+
+y_limits <- range(c(lower, upper, fitted(sarima_model), test_data))
+
+plot(daily_data_ts, col = "black", type = "l", lwd = 2, ylim = y_limits, 
+     main = "ARIMA(3,1,2)(0,1,0)[365] Model Forecast",  xlab = "Date", ylab = "Number of Crimes per day")
+
+# Plot the fitted values on the training set with slight transparency
+lines(fitted(sarima_model), col = rgb(1, 0, 0, 0.9), lwd = 2)
+
+# Plot the forecasted values on the test set in green
+lines(forecast_values$mean, col = rgb(0, 1, 0, 0.9), lwd = 2)
+
+legend("topright", 
+       legend = c("Original Data", "Fitted Values", "Forecasted Values"), 
+       col = c("black", rgb(1, 0, 0, 0.9), "green", rgb(0, 0.5, 0, 0.5)), 
+       lty = 1, lwd = 2)
+
+# Extract the forecasted values
+forecast_values <- as.numeric(forecast_values$mean)
+
+# Extract the actual values from the test set
+actual_values <- as.numeric(test_data)
+
+# Calculate RMSE
+rmse <- sqrt(mean((forecast_values - actual_values)^2))
+cat("Root Mean Squared Error (RMSE):", rmse, "\n")
+
+# Calculate MAPE
+mape <- mean(abs((actual_values - forecast_values) / actual_values)) * 100
+cat("Mean Absolute Percentage Error (MAPE):", mape, "%\n")
+```
+
+# #######
+# TBATS
+# #######
+```{r}
+# Split the time series into training and testing sets
+train_size <- floor(length(daily_data_ts) * 0.9)  
+train_data <- head(daily_data_ts, train_size)
+test_data <- tail(daily_data_ts, length(daily_data_ts) - train_size)
+
+# Fit a tbats model using the training set
+tbats_model <- tbats(train_data)
+
+print(tbats_model)
+
+# Forecast using the tbats model
+forecast_tbats <- forecast(tbats_model, h = length(test_data))
+```
+
+```{r}
+# Plot original time series data
+plot(daily_data_ts, col = "black", type = "l", lwd = 2, 
+     main = "TBATS Model Forecast",  xlab = "Date", ylab = "Number of Crimes per day")
+
+# Extract time values from the test set
+time_values_test <- time(test_data)
+
+polygon(
+  c(time_values_test, rev(time_values_test)),
+  c(forecast_tbats$upper[, 1], rev(forecast_tbats$lower[, 1])),
+  col = rgb(0, 144/250, 0, 0.5),
+  border = NA
+)
+
+# Add the forecasted values
+lines(forecast_tbats$mean, col = "green", lwd = 2)
+
+legend("topright", 
+       legend = c("Original Data", "Forecasted Values"), 
+       col = c("black", "green"), 
+       lty = c(1, 1, 2), lwd = 2)
+
+# Extract the forecasted values
+forecast_values <- as.numeric(forecast_tbats$mean)
+
+# Extract the actual values from the test set
+actual_values <- as.numeric(test_data)
+
+# Calculate RMSE
+rmse <- sqrt(mean((forecast_values - actual_values)^2))
+cat("Root Mean Squared Error (RMSE):", rmse, "\n")
+
+# Calculate MAPE
+mape <- mean(abs((actual_values - forecast_values) / actual_values)) * 100
+cat("Mean Absolute Percentage Error (MAPE):", mape, "%\n")
+```
+
+# #######
+# HW
+# #######
+```{r}
+# Split the time series into training and testing sets
+train_size <- floor(length(daily_data_ts) * 0.9)
+train_data <- head(daily_data_ts, train_size)
+test_data <- tail(daily_data_ts, length(daily_data_ts) - train_size)
+
+# Apply Holt-Winters Exponential Smoothing to the training set
+hwe_model <- HoltWinters(train_data)
+
+# Forecast on the test set
+hwe_forecast <- forecast(hwe_model, h = length(test_data))
+
+# Plot the results 
+plot(hwe_forecast, main = "Holt-Winters Forecast on Test Set", xlab = "Date", ylab = "Number of Crimes per day", xlim = c(min(index(daily_data_ts)), max(index(daily_data_ts))))
+legend("topright", legend = c("H-W Forecast", "Actual Values"), col = c("blue", "black"), lty = 1:1)
+
+# Calculate RMSE
+rmse <- sqrt(mean((hwe_forecast$mean - test_data)^2))
+cat("Root Mean Squared Error (RMSE):", rmse, "\n")
+
+# Calculate MAPE
+mape <- mean(abs((test_data - hwe_forecast$mean) / test_data)) * 100
+cat("Mean Absolute Percentage Error (MAPE):", mape, "%\n")
+```
+
+
+
