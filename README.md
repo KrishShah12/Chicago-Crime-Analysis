@@ -1,5 +1,6 @@
-# Chicago-Crime-Analysis-16-954-596-03-Project
-Project for Regression and Time Series Analysis Class Assignment. Project based on the Chicago Crime Dataset .  The primary goal of the analysis is to develop a model that can predict the number and types of crimes that may occur on a single day based on time series and location data
+# Chicago-Crime-Analysis
+
+The primary goal of the analysis is to develop a model that can predict the number and types of crimes that may occur on a single day based on time series and location data
 The project will feature regression analysis on a large dataset of crimes in the city of
 Chicago, Illinois filtered from January 1st, 2018 to the present day. The dataset is sourced
 directly from the city’s official Open Data Portal. Alongside the creation and optimization of a
